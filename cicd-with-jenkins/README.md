@@ -93,52 +93,71 @@ A typical Jenkins CICD pipeline involves the following stages:
 * If a job fails, the pipeline stops
 
 
-## Jenkins codealong (first job)
+## Jenkins Code Along
 
-* Click new item
-* Give the item a name
-* Click freestyle project
-* Click ok
-* Each job in diagram is a Jenkins project
-* Give description e.g. `testing jenkins`
-* Tick box to discard old builds - Each time project runs, there is a new build that is created.
-* Set the max number of builds to keep as 5
-* Scroll down to build steps
-  * click add build step
-  * choose execute shell
-  * insert uname -a
-  * click save
-* To change details, click configure
+### Creating our First Job
+
+The purpose of the first job is to run the application tests. 
+
+Instructions to create job 1:
+
+1. Log into the Jenkins server
+2. Click new item
+* Give the project a name
+* Select **freestyle** project
+* Click **ok**
+* In the **General** section:
+  * Give the project a description e.g. `testing jenkins`
+  * Tick the box to discard old builds and set **Max # of builds to keep** to 5
+* In the **Build Steps** section:
+  1. click add build step
+  2. choose execute shell
+  3. paste `uname -a` into the text box
+
+  4. click save
+
 * When ready to run the job,click build now (manual)
+
+## Viewing Console Output From a Job
+
 * How to find out what happened:
-  * click on the project link from dashboard
-  * In the bottom left, click on the link
-  * Click on console output
+  * Click on the project link from the dashboard
+  * In the bottom left of the screen, click the link of the job execution
+  * Click **console output**
 
-## Jenkins codealong (making one job run after another)
-* click on the first job `joshua-first-job` from the dashboard
-* go to configure
-* go to post build actions
-* select build other projects
-* type in the name of the project you want to run after
-* leave trigger only if build is stable option
+## Triggering the Execution of Jobs
+
+Jobs can be set to execute on the successful completion of another job:
+
+1. Click on a job
+2. Go to the **configure** section
+3. Scroll down to **Post-build Actions**
+4. Click **Add post-build action** then select **Build other projects**
+5. Type in the name of the project you want to run after
+6. Leave the **trigger only if build is stable** option selected
 
 
-## Jenkins codealong (setting up repository key pair)
-* key pair name: `joshua-jenkins-github-key`
-* Open terminal window
-* cd .ssh folder
-* `ssh-keygen -t rsa -b 4096 -C "<email address>"`
-* name it: `joshua-jenkins-github-key`
-* log into GitHub
-* navigate to repo made for cicd
-* go into the settings for the individual repo
-* click deploy keys on the left menu
-* click add deploy key
-* make the title the same as the local keypair name
-* copy the public key into the key box
-* Tick **Allow write access** option
-* Click **Add key**
+## Setting up the GitHub Key Pair
+
+The Jenkins worker node requies the private key of the GitHub key pair to run git commands
+such as `git merge`. 
+
+1. Open a terminal window
+2. `cd` into the .ssh folder
+3. Run: `ssh-keygen -t rsa -b 4096 -C "<email address>"`
+4. Name the key pair: `joshua-jenkins-github-key`
+5. Log into GitHub
+6. Navigate to the CICD repo
+7. Go into the settings for the individual repo
+8. Click deploy keys on the left menu
+9. Click add deploy key
+10. Set the key pair title: `joshua-jenkins-github-key`
+11. Copy the public key into the text area:
+    1.  Find the `.pub` file created by the `ssh-keygen` command
+    2.  Use `cat` to print the key to the terminal
+    3.  Copy the entire output to the text area on GitHub for the public key
+12. Tick **Allow write access** option - needed for Jenkins to perform merge
+13. Click **Add key**
 
 ## Jenkins codealong (setting up job 1)
 
@@ -167,3 +186,59 @@ A typical Jenkins CICD pipeline involves the following stages:
 * Branch specifier : */main
 * scroll down to build environment 
   * select provide node and npm bin/ folder to PATH
+
+## Jenkins Codealong (setting up webhook to trigger job 1)
+
+* Select job 1 from dashboard
+* Click configure
+* Scroll down to build triggers
+  * Choose GitHub Hook trigger for GITScm polling
+* Click save
+* Go to GitHub repo settings
+* Go to webhooks section
+* click add webhook
+  * Payload URL: `http://34.254.6.118:8080/github-webhook/` (jenkins server)
+* click add webhook
+
+
+## Job 2
+
+* Copy job1 but remove the webhook
+* ❗Must add SSH agent in the SCM section otherwise git commands fail
+* eval `` commadn to setup ssh agent locally
+* In the execute shell section paste the following:
+
+```bash
+git checkout main
+git merge origin/dev
+git push origin main
+```
+
+
+## Job 3
+
+scp command not working 
+
+```
++ scp -r ./README.md ./app ubuntu@54.195.43.141:~
+Host key verification failed.
+```
+SSH known hosts error
+
+fix: add `-o StrictHostKeyChecking=no` into the scp command
+
+
+## Working CI/CD pipeline
+
+* Can make a change to the source code on my local machine and push to GitHub (Dev branch)
+* The changes are automatically tested, merged with main (only if tests pass), and deployed to EC2 instance
+
+1st change to frontpage: 
+
+![first-change-to-frontpage](../images/first-change-frontpage.png)
+
+Second change to frontpage:
+
+![second-change-to-frontpage](../images/second-change-frontpage.png)
+
+
