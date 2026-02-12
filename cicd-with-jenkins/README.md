@@ -20,10 +20,20 @@
       - [Pre-requisites](#pre-requisites)
         - [Setting up the GitHub Key Pair](#setting-up-the-github-key-pair)
       - [How to Create Job 1](#how-to-create-job-1)
-  - [Setting up the Webhook to Trigger Job 1](#setting-up-the-webhook-to-trigger-job-1)
-  - [Job 2 - Merging Dev into Main](#job-2---merging-dev-into-main)
-  - [Job 3 - Deploying the Code to an EC2 instance](#job-3---deploying-the-code-to-an-ec2-instance)
+      - [Setting up the Webhook to Trigger Job 1](#setting-up-the-webhook-to-trigger-job-1)
+      - [Confirming Job 1 Works as Expected](#confirming-job-1-works-as-expected)
+    - [Job 2 - Merging Dev into Main](#job-2---merging-dev-into-main)
+      - [How to Create Job 2](#how-to-create-job-2)
+      - [Job 2 Alternative Approach](#job-2-alternative-approach)
+    - [Job 3 - Deploying the Code to an EC2 instance](#job-3---deploying-the-code-to-an-ec2-instance)
+      - [Pre-requisites](#pre-requisites-1)
+        - [Setup an EC2 Instance to Host the App](#setup-an-ec2-instance-to-host-the-app)
+        - [AWS Key Pair](#aws-key-pair)
+      - [How to Create Job 3](#how-to-create-job-3)
+      - [Job 3 Alternative Approach](#job-3-alternative-approach)
   - [Working CI/CD pipeline](#working-cicd-pipeline)
+  - [Benefits of the CI/CD Pipeline](#benefits-of-the-cicd-pipeline)
+  - [Potential Problems with the CI/CD Pipeline](#potential-problems-with-the-cicd-pipeline)
 
 ## CICD Overview
 
@@ -165,6 +175,9 @@ The image below shows the pipeline to be built
 * If a job fails, the pipeline stops
 
 ### Job 1 - Running Tests
+
+The purpose of Job 1 is to run the unit tests defined in `/app/test/test-server.js` and make sure the code passes all tests before code is merged to main branch
+
 #### Pre-requisites
 
 ##### Setting up the GitHub Key Pair
@@ -219,59 +232,184 @@ How to setup the repository key pair:
       * Paste the GitHub repository private key in the text box
     * Branch specifier : */dev
 * In the **Build Environment** section:
-  * Tick the **provide node and npm bin/ folder to PATH** option
+  * Tick the **Provide node and npm bin/ folder to PATH** option
+* In the **Post-build actions** section:
+  * In the **Projects to Build** dropdown, specify job 2
+  * Select **Trigger only if build is stable** (Job 2 only runs if Job 1 is successful)
 
-## Setting up the Webhook to Trigger Job 1
+#### Setting up the Webhook to Trigger Job 1
 
-1. Select job 1 from dashboard
-2. Click configure
+1. Select job 1 from the Jenkins dashboard
+2. Click **Configure**
 3. Scroll down to the **Build triggers** section:
      * Choose GitHub Hook trigger for GITScm polling
 4. Click save
 5. Go to GitHub repo settings
-6. Go to webhooks section
+6. Go to Webhooks section
 7. Click add webhook
      * Payload URL: `http://34.254.6.118:8080/github-webhook/` (jenkins server)
-8. click add webhook
+8. Click **Add webhook**
 
 
-## Job 2 - Merging Dev into Main
+#### Confirming Job 1 Works as Expected
+
+* If any tests fail during Job 1, Jobs 2 and 3 should never start.
+* Test: Include a test case that is garunteed to fail. See if pipeline stops.
+
+* I added the following test to the end of `app/test/test-server.js`
+
+```js
+describe('Intentional Failure', function() {
+  it('should always fail (CI/CD pipeline test)', function() {
+    throw new Error('Intentional failure for pipeline testing');
+  });
+});
+```
+
+* After pushing to the main branch and triggering the pipeline, job 1 is marked as failed
+* No further jobs are triggered
+* Console output:
+
+  ![failed-test-case](../images/failed-test-case.png)
+
+* Job 1 works as expected
+
+
+### Job 2 - Merging Dev into Main
+
+#### How to Create Job 2
 
 1. Click **New item** from the Jenkins dashboard
 2. Select option to copy another Job
    * Copy from job 1
+3. Click **Ok**
+* Scroll to the **Build Triggers** section:
+  * Untick **GitHub hook trigger for GITScm polling** (webhook does not trigger this job)
+* Scroll to the **Build Environment** section:
+  * Tick **SSH Agent**
+  * In the credentials section, add the GitHub repo private key
+  * ❗Must add SSH agent otherwise `git push` will fail
+  * Untick **Provide Node & npm bin/folder to PATH** (**Execute shell** section does not use any npm commands)
+* Scroll to the **Build Steps** section:
+  * Select **Execute shell** and paste the following code to the text area:
 
-* Remove the Webhook
-* Navigate to the **Source Code Management** section:
-   * ❗Must add SSH agent in the SCM section otherwise git push command will fail
-
-* In the **Execute shell** section paste the following:
-
-  ```bash
-  git checkout main
-  git merge origin/dev
-  git push origin main
-  ```
+    ```bash
+    git checkout main
+    git merge origin/dev
+    git push origin main
+    ```
   * `git checkout main` - Switches to the main branch
   * `git merge origin/dev` - Merges the dev branch to the main branch
   * `git push origin main` - Pushes the code to GitHub
 
+* In the **Post-build Actions** section:
+  * In the **Projects to build** dropdown, specify Job 3
+  * Select **Trigger only if build is stable**
+* Click **Save**
 
-## Job 3 - Deploying the Code to an EC2 instance
+#### Job 2 Alternative Approach
+
+* Instead of putting git commands in the **Execute shell** section, can use plugins
+
+Instructions:
+* Remove all code from **Execute shell** in the **Build Steps** section
+* Scroll to **Post-build Actions** section:
+  * Click **Add post-build action**
+    * Select **Git Publisher**
+      * Tick **Push Only If Build Succeeds**
+      * Tick **Merge Results**
+      * Branch to push: main
+      * Target remote name: origin
+
+### Job 3 - Deploying the Code to an EC2 instance
+
+#### Pre-requisites
+
+##### Setup an EC2 Instance to Host the App
+
+1. Create an EC2 instance on AWS:
+2. SSH into the EC2 instance
+3. Create a script called `install-app-dependencies.sh` to install app dependencies: [install-app-dependencies.sh](../install-app-dependencies.sh)
+4. Add execute permissions to the script: `chmod 400 install-app-dependencies.sh`
+5. Run the script on the EC2 instance: `./install-app-dependencies`
+
+##### AWS Key Pair
+
+* Must generate an AWS key pair and attach it to the EC2 instance
+
+
+#### How to Create Job 3
 
 1. Click **New item** from the Jenkins dashboard
 2. Select the option to copy another job
-3. 
+   * Select job 2
+3. Click **Ok**
+* Go to the **Build Environment** section:
+  * Untick **Provide Node & npm bin/folder to PATH**
+  * Select **SSH Agent**
+    * Click **Add**
+    * Select **SSH username with private key** and fill in the details of the AWS key 
+* Go to the **Build Steps** section:
+  * Select **Execute shell**
+  * Paste the following code into the text area:
 
-scp command not working 
+    ```bash
+    # Copy the Sparta app repository to the ubuntu home directory
+    scp -o StrictHostKeyChecking=no -r ./* ubuntu@<public IP of app VM>:~
 
-```
-+ scp -r ./README.md ./app ubuntu@54.195.43.141:~
-Host key verification failed.
-```
-SSH known hosts error
+    # SSH into the VM as the Ubuntu user and run commands to start the app
+    ssh -o StrictHostKeyChecking=no ubuntu@54.195.43.141 << EOF
+      cd app
+      npm install
+      pm2 stop all
+      pm2 delete all
+      pm2 start app.js
+    EOF
+    ```
+* Click **Save**
 
-fix: add `-o StrictHostKeyChecking=no` into the scp command
+#### Job 3 Alternative Approach
+
+* Create a script on the app EC2 instance to handle the startup of the application: [deploy-app.sh](./deploy-app.sh)
+* Add execute permissions to the script: `chmod +x deploy-app.sh`
+* Replace the **Execute shell** section code with:
+   ```bash
+    
+    scp -o StrictHostKeyChecking=no -r ./* ubuntu@<public IP of app VM>:~
+
+    ssh -o StrictHostKeyChecking=no ubuntu@54.195.43.141 "./deploy-app.sh"
+    ```
+
+
+
+#### Blockers
+
+* By default, the `scp` and `ssh` commands do not work
+* The following commands fail:
+  
+  ```
+  scp -r ./README.md ./app ubuntu@54.195.43.141:~
+
+  ssh ubuntu@54.195.43.141
+  ```
+* The error message:
+
+  ```
+  SSH known hosts error
+  ```
+* The issue: 
+  * By default, SSH/SCP requies host key verification
+  * When connecting to a new server for the first time, SSH:
+   1. Retrieves the server's host key
+   2. Prompts the user: `Are you want to continue connecting (yes/no)?`
+   3. Stores the key in ~/.ssh/known_hosts
+  * Since Jenkins cannot answer this prompt (because we cannot enter user input), the connection fails
+
+* The fix:
+  * Add the `-o StrictHostKeyChecking=no` flag into the scp command
+  * This disables the SSH host key verification process
+
+
 
 
 ## Working CI/CD pipeline
@@ -286,5 +424,26 @@ fix: add `-o StrictHostKeyChecking=no` into the scp command
 Second change to frontpage:
 
 ![second-change-to-frontpage](../images/second-change-frontpage.png)
+
+
+## Benefits of the CI/CD Pipeline
+
+* Able to quickly deploy code to production:
+  * No need to manually run tests
+  * No need to manually run git commands such as `git merge`
+  * No need to manually copy code onto EC2 instance
+  * No need to manually run application startup commandsj
+* Reduced risk of human error - no risk of typing commands incorrectly if the pipeline is set up correctly.
+* Safety - reduced risk of deploying buggy code to production
+
+
+## Potential Problems with the CI/CD Pipeline
+
+![problem](../images/problem.png)
+
+
+
+
+
 
 
